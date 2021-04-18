@@ -1,0 +1,7 @@
+environment:
+  path: gym.atari
+  num_workers: 2
+  num_envs_per_worker: 2
+  max_episodes: 1
+  conf:
+    id: Pong-v0
