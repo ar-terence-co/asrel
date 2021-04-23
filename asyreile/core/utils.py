@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import pathlib
+import torch
 from typing import Dict, Type
 import yaml
 
@@ -35,6 +36,27 @@ def get_env_args_from_config(config: Dict) -> Dict:
     "num_workers": config.get("num_workers", 1),
     "env_config": config.get("conf", {}),
   }
+
+
+def get_actor_args_from_config(config: Dict) -> Dict:
+  actor_path = f"asyreile.actors.{config['path']}"
+  actor_class_name = config.get("class")
+  actor_class = get_class_from_module_path(actor_path, class_name=actor_class_name, class_suffix="Actor")
+
+  return {
+    "actor_class": actor_class,
+    "actor_config": config.get("conf", {})
+  }
+
+
+def get_net_from_config(config: Dict) -> torch.nn.Module:
+  net_path = f"asyreile.networks.{config['path']}"
+  net_class_name = config.get("class")
+  net_class = get_class_from_module_path(net_path, class_name=net_class_name, class_suffix="Network")
+
+  net_config = config.get("conf", {})
+
+  return net_class(**net_config)
 
 
 def get_class_from_module_path(module_path, class_name: str = None, class_suffix: str = None) -> Type:

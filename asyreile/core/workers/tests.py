@@ -9,7 +9,7 @@ def test_environment_worker(config: Dict):
   Function to run an isolated env worker and manually test it out in the cli.
   """
   from asyreile.core.utils import get_env_args_from_config
-  from .environment import EnvironmentWorker
+  from asyreile.core.workers.environment import EnvironmentWorker
 
   env_args = get_env_args_from_config(config["environment"])
 
