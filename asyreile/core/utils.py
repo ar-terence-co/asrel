@@ -1,5 +1,6 @@
 import argparse
 import importlib
+import numpy as np
 import pathlib
 import torch
 from typing import Dict, Type
@@ -23,6 +24,20 @@ def get_config(config_file: str) -> Dict:
   with open(config_file, "r") as f:
     config = yaml.safe_load(f)
   return config
+
+
+def get_seed_sequences(config: Dict):
+  seed = config.get("seed")
+  main_ss = np.random.SeedSequence(entropy=seed)
+  print(f"SEED {main_ss.entropy}")
+
+  env_seed_seq, actor_seed_seq, learner_seed_seq, replay_seed_seq = main_ss.spawn(4)
+  return {
+    "environment": env_seed_seq,
+    "actor": actor_seed_seq,
+    "learner": learner_seed_seq,
+    "replay": replay_seed_seq,
+  }
 
 
 def get_env_args_from_config(config: Dict) -> Dict:

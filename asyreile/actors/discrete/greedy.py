@@ -10,7 +10,6 @@ class GreedyDiscreteActor(BaseActor):
   def __init__(
     self,
     net: Dict = {},
-    seed: Optional[int] = None, 
     device: str = "cpu"
   ):
     self.device = torch.device(device)
@@ -19,9 +18,6 @@ class GreedyDiscreteActor(BaseActor):
     self.net.to(self.device)
     self.net.requires_grad_(False)
     self.net.eval()
-
-    self.generator =  torch.Generator(device=self.device)
-    if seed is not None: self.generator.manual_seed(seed)
 
     self.epsilon = 0
 
@@ -34,7 +30,7 @@ class GreedyDiscreteActor(BaseActor):
     eps = torch.full(out.shape, self.epsilon / out.shape[-1])
     probs = one_hot * (1 - self.epsilon) + eps
 
-    actions = torch.multinomial(probs, 1, replacement=True, generator=self.generator).squeeze()
+    actions = torch.multinomial(probs, 1, replacement=True).view(-1)
     return actions
 
   def sync_networks(self, network_params: OrderedDict):

@@ -1,28 +1,45 @@
-from queue import Queue
+import multiprocessing
+import numpy as np
+import signal
 from typing import Any, Dict, List, Type
 
 from asyreile.environments.base import BaseEnvironment
 
-class EnvironmentWorker:
+
+class EnvironmentWorker(multiprocessing.Process):
   def __init__(
     self,
     env_class: Type[BaseEnvironment],
-    input_queue: Queue,
-    output_queue: Queue,
+    input_queue: multiprocessing.Queue,
+    output_queue: multiprocessing.Queue,
+    seed_seq: np.random.SeedSequence,
     num_envs: int = 2,
     max_episodes: int = 1,
     env_config: Dict = {},
     index: int = 0,
     **kwargs,
   ):
-    self.num_envs = num_envs
-    self.max_episodes = max_episodes
-    self.index = index
+    super().__init__()
 
     self.input_queue = input_queue
     self.output_queue = output_queue
+    self.seed_seq = seed_seq
 
-    self.envs = [env_class(**env_config) for _ in range(self.num_envs)]
+    self.env_class = env_class
+    self.num_envs = num_envs
+    self.max_episodes = max_episodes
+    self.env_config = env_config
+
+    self.index = index
+
+  def setup(self):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    self.envs = [self.env_class(**self.env_config) for _ in range(self.num_envs)]
+    self.env_seed_seqs = self.seed_seq.spawn(self.num_envs)
+    for i, seed_seq in enumerate(self.env_seed_seqs):
+      self.envs[i].seed(seed_seq.generate_state(1).item())
+
     self.episode_scores = [0. for _ in range(self.num_envs)]
     self.episode_exp = [
       {"worker_idx": self.index, "env_idx": i} 
@@ -32,12 +49,13 @@ class EnvironmentWorker:
     self.total_steps = 0
     self.total_episodes = 0
 
-    self.run()
-
   def run(self):
+    self.setup()
+
     for idx in range(self.num_envs):
       exp = self._reset_env(idx)
       self.output_queue.put(exp)
+
     while True:
       task = self.input_queue.get()
       idx = task["env_idx"]

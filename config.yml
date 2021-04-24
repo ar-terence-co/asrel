@@ -9,7 +9,6 @@ environment:
 actor:
   path: discrete.greedy
   conf: 
-    seed: 123456790
     device: cuda
 
     net:
@@ -18,3 +17,5 @@ actor:
         input_size: [16]
         output_size: [4]
         hidden_layers: [256, 256]
+
+seed: 1234567890
