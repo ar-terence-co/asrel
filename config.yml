@@ -7,5 +7,14 @@ environment:
     id: Pong-v0
 
 actor:
-  path: discrete
-  conf: {}
+  path: discrete.greedy
+  conf: 
+    seed: 123456790
+    device: cuda
+
+    net:
+      path: feed_forward
+      conf:
+        input_size: [16]
+        output_size: [4]
+        hidden_layers: [256, 256]
