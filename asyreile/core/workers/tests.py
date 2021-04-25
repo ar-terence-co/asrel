@@ -131,8 +131,7 @@ def test_actor_worker(config: Dict, seeds: List[np.random.SeedSequence]):
           "env_idx": (env_worker_idx, env_sub_idx),
         })
         out = actor_shared_output_queue.get()
-        # out_action = get_tensor_from_event(out, "action")
-        out_action = out["action"]
+        out_action = get_tensor_from_event(out, "action")
         print(f"worker {worker_idx}:")
         print({**out, "action": out_action})
 
