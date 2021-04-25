@@ -1,30 +1,44 @@
-from queue import Queue
+from multiprocessing import Queue, Process
+import numpy as np
+import random
+import torch
 from typing import Any, Dict, List, Type
+
+from asyreile.actors.base import BaseActor
 
 class ActorWorker:
   def __init__(
     self,
-    actor_class: Type,
     input_queue: Queue,
     output_queue: Queue,
     sync_queue: Queue,
     update_queue: Queue,
+    seed_seq: np.random.SeedSequence,
+    actor_class: Type[BaseActor],
     actor_config: Dict = {},
     index: int = 0,
     **kwargs,
   ):
-    self.index = index
+    super().__init__()
 
     self.input_queue = input_queue
     self.output_queue = output_queue
     self.sync_queue = sync_queue
     self.update_queue = update_queue
+    self.seed_seq = seed_seq
 
+    self.actor_class = actor_class
+    self.actor_config = actor_config
+
+    self.index = index
+
+  def setup(self):
+    self._set_worker_rng()
     self.actor = actor_class(**actor_config)
 
-    self.run()
-  
   def run(self):    
+    self.setup()
+
     self._get_updates(wait=True)
     while True:
       task = self.input_queue.get()
@@ -38,6 +52,15 @@ class ActorWorker:
       })
 
       self._get_updates()
+
+  def _set_worker_rng(self):
+    np.random.seed(self.seed_seq.generate_state(4))
+
+    torch_seed_seq, py_seed_seq = self.seed_seq.spawn(3)
+    torch.manual_seed(torch_seed_seq.generate_state(1, dtype=np.uint64).item())
+
+    py_seed = (py_seed_seq.generate_state(2, dtype=np.uint64).astype(object) * [1 << 64, 1]).sum()
+    random.seed(py_seed)
 
   def _get_updates(self, wait=False):
     if not wait or self.update_queue.qsize() > 0:

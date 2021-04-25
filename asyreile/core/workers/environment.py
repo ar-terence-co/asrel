@@ -1,4 +1,5 @@
-import multiprocessing
+from multiprocessing import Process
+from multiprocessing.queues import Queue
 import numpy as np
 import signal
 from typing import Any, Dict, List, Type
@@ -6,13 +7,13 @@ from typing import Any, Dict, List, Type
 from asyreile.environments.base import BaseEnvironment
 
 
-class EnvironmentWorker(multiprocessing.Process):
+class EnvironmentWorker(Process):
   def __init__(
     self,
-    env_class: Type[BaseEnvironment],
-    input_queue: multiprocessing.Queue,
-    output_queue: multiprocessing.Queue,
+    input_queue: Queue,
+    output_queue: Queue,
     seed_seq: np.random.SeedSequence,
+    env_class: Type[BaseEnvironment],
     num_envs: int = 2,
     max_episodes: int = 1,
     env_config: Dict = {},

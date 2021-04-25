@@ -1,9 +1,10 @@
 import json
-from multiprocessing import Queue, Process
+from multiprocessing import Process, get_context
+from multiprocessing.queues import Queue, Empty
 import numpy as np
 import time
-from typing import Dict, List
-
+from threading import Thread
+from typing import Callable, Dict, List
 
 def test_environment_worker(config: Dict, seeds: Dict[str, np.random.SeedSequence]):
   """
@@ -16,22 +17,34 @@ def test_environment_worker(config: Dict, seeds: Dict[str, np.random.SeedSequenc
 
   print(f"Testing Environment Worker with args: {env_args}")
 
-  env_input_queue = Queue(maxsize=env_args["num_envs"])
-  env_output_queue = Queue(maxsize=env_args["num_envs"])
+  num_workers = env_args.get("num_workers", 1)
+  num_envs = env_args.get("num_envs", 2)
 
-  env_worker = EnvironmentWorker(
-    input_queue=env_input_queue,
-    output_queue=env_output_queue,
-    seed_seq=seeds["environment"],
-    **env_args,
-  )
-  env_worker.start()
+  print("Creating workers...")
 
-  print(f"Started worker...")
+  ctx = get_context()
+  env_input_queues = [Queue(maxsize=num_envs, ctx=ctx) for _ in range(num_workers)]
+  env_output_queue = Queue(maxsize=num_workers * num_envs, ctx=ctx)
+  env_worker_seed_seqs = seeds["environment"].spawn(num_workers)
+
+  env_workers = [
+    EnvironmentWorker(
+      input_queue=env_input_queues[idx],
+      output_queue=env_output_queue,
+      seed_seq=env_worker_seed_seqs[idx],
+      index=idx,
+      **env_args,
+    )
+    for idx in range(num_workers)
+  ]
+  for worker in env_workers:
+    worker.start()
+
+  print(f"Started workers...")
 
   try:
     while True:
-      time.sleep(1)
+      time.sleep(2)
       env_out = env_output_queue.get()
       print(f"worker {env_out['worker_idx']}:")
       print({**env_out, "observation": f"... [{env_out['observation'].shape}]"})
@@ -44,18 +57,21 @@ def test_environment_worker(config: Dict, seeds: Dict[str, np.random.SeedSequenc
       worker_idx = int(input(" worker: ",))
       env_idx = int(input(" env:    "))
       action = int(input(" action: "))
-      env_input_queue.put({
+      env_input_queues[worker_idx].put({
         "worker_idx": worker_idx,
         "env_idx": env_idx,
         "action": action,
       })
   except (KeyboardInterrupt, Exception) as e:
     print()
-    print("Terminating worker...")
-    env_worker.terminate()
+    print("Terminating workers...")
+    for worker in env_workers:
+      worker.terminate()
     print(e)
   else:
     print("Closing worker...")
-    env_worker.close()
+    for worker in env_workers:
+      worker.close()
 
-  env_worker.join()
+  for worker in env_workers:
+    worker.join()
