@@ -1,14 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from collections import OrderedDict
+import torch
+from typing import Any, Dict
 
 class BaseActor(ABC):
 
   @abstractmethod
-  def choose_action(self, obs: Any, greedy: bool = False) -> Any:
+  def choose_action(self, obs: torch.Tensor, greedy: bool = False) -> torch.Tensor:
     pass
 
   @abstractmethod
-  def sync_networks(self, network_params: Any):
+  def sync_networks(self, state_dicts: Dict[str, OrderedDict]):
     pass
 
   @abstractmethod

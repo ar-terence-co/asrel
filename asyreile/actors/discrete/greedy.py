@@ -27,14 +27,15 @@ class GreedyDiscreteActor(BaseActor):
     if greedy: return greedy_actions
     
     one_hot = F.one_hot(greedy_actions, num_classes=out.shape[-1])
-    eps = torch.full(out.shape, self.epsilon / out.shape[-1])
+    eps = torch.full(out.shape, self.epsilon / out.shape[-1]).to(self.device)
     probs = one_hot * (1 - self.epsilon) + eps
 
     actions = torch.multinomial(probs, 1, replacement=True).view(-1)
     return actions
 
-  def sync_networks(self, network_params: OrderedDict):
-    self.net.load_state_dict(network_params)
+  def sync_networks(self, state_dicts: Dict[str, OrderedDict]):
+    if "net" in state_dicts:
+      self.net.load_state_dict(state_dicts["net"])
 
   def update(self, **kwargs):
     if "epsilon" in kwargs:

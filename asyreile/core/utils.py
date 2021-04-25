@@ -16,6 +16,7 @@ def get_args(description: str = "ASYnc REInforcement LEarning") -> argparse.Name
   parser = argparse.ArgumentParser(description=description)
   parser.add_argument("--config", help="Path to the config file", default=str(DEFAULT_CONFIG))
   parser.add_argument("--test-env-worker", action="store_true", help="Run only the environment worker in the background.")
+  parser.add_argument("--test-actor-worker", action="store_true", help="Run only the actor worker in the background.")
   args = parser.parse_args()
   return args
 
@@ -56,10 +57,13 @@ def get_env_args_from_config(config: Dict) -> Dict:
 def get_actor_args_from_config(config: Dict) -> Dict:
   actor_path = f"asyreile.actors.{config['path']}"
   actor_class_name = config.get("class")
+  print(actor_path)
   actor_class = get_class_from_module_path(actor_path, class_name=actor_class_name, class_suffix="Actor")
+  print(actor_class)
 
   return {
     "actor_class": actor_class,
+    "num_workers": config.get("num_workers", 1),
     "actor_config": config.get("conf", {})
   }
 
@@ -78,8 +82,13 @@ def get_class_from_module_path(module_path, class_name: str = None, class_suffix
   module = importlib.import_module(module_path)
   if not class_name and class_suffix:
     for name in dir(module):
-      if name.endswith(class_suffix):
+      if name.endswith(class_suffix) and name != f"Base{class_suffix}":
         class_name = name
         break
   if not class_name: raise ConfigError(f"Cannot find valid class for module `{module_path}`")
   return getattr(module, class_name)
+
+def get_tensor_from_event(event, key):
+  t = event[key].clone()
+  del event[key]
+  return t

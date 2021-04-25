@@ -8,13 +8,14 @@ environment:
 
 actor:
   path: discrete.greedy
+  num_workers: 2
   conf: 
     device: cuda
 
     net:
       path: feed_forward
       conf:
-        input_size: [16]
+        input_size: [2]
         output_size: [4]
         hidden_layers: [256, 256]
 

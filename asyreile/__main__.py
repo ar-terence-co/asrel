@@ -21,3 +21,7 @@ if __name__ == "__main__":
   if args.test_env_worker:
     from asyreile.core.workers.tests import test_environment_worker
     test_environment_worker(config, seeds)
+
+  if args.test_actor_worker:
+    from asyreile.core.workers.tests import test_actor_worker
+    test_actor_worker(config, seeds)

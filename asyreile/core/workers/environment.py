@@ -4,6 +4,7 @@ import numpy as np
 import signal
 from typing import Any, Dict, List, Type
 
+import asyreile.core.workers.events as events
 from asyreile.environments.base import BaseEnvironment
 
 
@@ -42,11 +43,9 @@ class EnvironmentWorker(Process):
       self.envs[i].seed(seed_seq.generate_state(1).item())
 
     self.episode_scores = [0. for _ in range(self.num_envs)]
-    self.episode_exp = [
-      {"worker_idx": self.index, "env_idx": i} 
-      for i in range(self.num_envs)
-    ]
-
+    self.episode_steps = [0 for _ in range(self.num_envs)]
+    self.episode_dones = [True for _ in range(self.num_envs)]
+    
     self.total_steps = 0
     self.total_episodes = 0
 
@@ -54,20 +53,46 @@ class EnvironmentWorker(Process):
     self.setup()
 
     for idx in range(self.num_envs):
-      exp = self._reset_env(idx)
-      self.output_queue.put(exp)
+      obs = self._reset_env(idx)
+      self.output_queue.put({
+        "type": events.RETURNED_OBSERVATION_EVENT,
+        "observation": obs,
+        "reward": 0.,
+        "episode_step": 0,
+        "episode_done": False,
+        "task_done": False,
+        "env_idx": (self.index, idx),
+      })
 
     while True:
       task = self.input_queue.get()
-      idx = task["env_idx"]
 
-      if self.episode_exp[idx]["episode_done"]:
-        exp = self._reset_env(idx)
-        self.output_queue.put(exp)
-      else:
-        action = task["action"]
-        exp = self._step_env(idx, action)
-        self.output_queue.put(exp)
+      if task["type"] == events.ENV_INTERACT_TASK:
+        _, idx = task["env_idx"]
+
+        if self.episode_dones[idx]:
+          obs = self._reset_env(idx)
+          self.output_queue.put({
+            "type": events.RETURNED_OBSERVATION_EVENT,
+            "observation": obs,
+            "reward": 0.,
+            "episode_step": 0,
+            "episode_done": False,
+            "task_done": False,
+            "env_idx": (self.index, idx),
+          })
+        else:
+          action = task["action"]
+          obs, reward, done, info = self._step_env(idx, action)
+          self.output_queue.put({
+            "type": events.RETURNED_OBSERVATION_EVENT,
+            "observation": obs,
+            "reward": reward,
+            "episode_step": self.episode_steps[idx],
+            "episode_done": done,
+            "task_done": done and not info.get("TimeLimit.truncated", False),
+            "env_idx": (self.index, idx),
+          })
       
       if self.total_episodes >= self.max_episodes: break
 
@@ -75,33 +100,19 @@ class EnvironmentWorker(Process):
     obs = self.envs[idx].reset()
 
     self.episode_scores[idx] = 0
+    self.episode_steps[idx] = 0
+    self.episode_dones[idx] = False
 
-    exp = self.episode_exp[idx]
-    exp.update({
-      "observation": obs,
-      "reward": 0.,
-      "episode_step": 0,
-      "episode_done": False,
-      "task_done": False,
-    })
-
-    return exp
+    return obs
 
   def _step_env(self, idx: int, action: Any) -> Dict:
     obs, reward, done, info = self.envs[idx].step(action)
 
     self.episode_scores[idx] += reward
-
-    exp = self.episode_exp[idx]
-    exp.update({
-      "observation": obs,
-      "reward": reward,
-      "episode_step": exp["episode_step"] + 1,
-      "episode_done": done,
-      "task_done": done and not info.get("TimeLimit.truncated", False),
-    })
+    self.episode_steps[idx] += 1
+    self.episode_dones[idx] = done
 
     if done: self.total_episodes += 1
     self.total_steps += 1
 
-    return exp 
+    return obs, reward, done, info
