@@ -84,6 +84,7 @@ def test_actor_worker(config: Dict, seeds: List[np.random.SeedSequence]):
   """
   Function to run an isolated actor workers and manually test it out in the cli.
   """
+  from gym.spaces import Box, Discrete
   from asyreile.core.utils import get_actor_args_from_config, get_tensor_from_event
   from asyreile.core.workers.actor import ActorWorker
   import asyreile.core.workers.events as events
@@ -94,6 +95,10 @@ def test_actor_worker(config: Dict, seeds: List[np.random.SeedSequence]):
 
   num_workers = actor_args.get("num_workers", 1)
   input_queue_len = 8
+  input_space = Box(-10, 10, (6, ), np.float32)
+
+  input_space.seed(0)
+  output_space = Discrete(3)
 
   print("Creating workers...")
 
@@ -106,6 +111,8 @@ def test_actor_worker(config: Dict, seeds: List[np.random.SeedSequence]):
       input_queue=actor_input_queues[idx],
       output_queue=actor_shared_output_queue,
       seed_seq=actor_worker_seed_seqs[idx],
+      input_space=input_space,
+      output_space=output_space,
       index=idx,
       **actor_args,
     )
@@ -120,9 +127,12 @@ def test_actor_worker(config: Dict, seeds: List[np.random.SeedSequence]):
       task = int(input("0 - Choose Action, 1 - Sync Networks, 2 - Update Params: "))
       if task == 0:
         worker_idx = int(input(" worker: ",))
-        obs = torch.Tensor(json.loads(input(" obs:    "))).cuda()
-        env_worker_idx = int(input(" env worker: "))
-        env_sub_idx = int(input("     subenv: "))
+
+        num_obs = int(input(" # of obs: "))
+        obs = torch.Tensor([input_space.sample() for _ in range(num_obs)]).cuda()
+        print(f" obs:\n{obs}")
+        env_worker_idx = int(input(" env worker:   "))
+        env_sub_idx = int(input("     subenv:   "))
         greedy = input(" greedy (y/n): ").lower() == "y"
         actor_input_queues[worker_idx].put({
           "type": events.ACTOR_CHOOSE_ACTION_TASK,

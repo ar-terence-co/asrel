@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from gym import Space
 import torch
 import torch.nn.functional as F
 from typing import Any, Dict, List, Optional
@@ -9,12 +10,21 @@ from asyreile.core.utils import get_net_from_config
 class GreedyDiscreteActor(BaseActor):
   def __init__(
     self,
+    input_space: Space,
+    output_space: Space,
     net: Dict = {},
-    device: str = "cpu"
+    device: str = "cpu",
   ):
+    self.input_space = input_space
+    self.output_space = output_space
+
     self.device = torch.device(device)
 
-    self.net = get_net_from_config(net)
+    self.net = get_net_from_config(
+      net,
+      input_size=self.input_space.shape,
+      output_size=(self.output_space.n,),
+    )
     self.net.to(self.device)
     self.net.requires_grad_(False)
     self.net.eval()

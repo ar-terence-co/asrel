@@ -1,4 +1,4 @@
-from multiprocessing import Process
+import torch.multiprocessing as mp
 from multiprocessing.queues import Queue
 import numpy as np
 import signal
@@ -8,7 +8,7 @@ import asyreile.core.workers.events as events
 from asyreile.environments.base import BaseEnvironment
 
 
-class EnvironmentWorker(Process):
+class EnvironmentWorker(mp.Process):
   def __init__(
     self,
     input_queue: Queue,

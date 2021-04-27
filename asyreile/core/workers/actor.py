@@ -1,14 +1,16 @@
 from collections import OrderedDict
+from gym import Space
 import torch.multiprocessing as mp
 from multiprocessing.queues import Queue
 import numpy as np
 import random
+import signal
 import torch
 from typing import Any, Dict, List, Type
 
 from asyreile.actors.base import BaseActor
 import asyreile.core.workers.events as events
-from asyreile.core.utils import get_tensor_from_event
+from asyreile.core.utils import get_tensor_from_event, set_worker_rng
 
 class ActorWorker(mp.Process):
   def __init__(
@@ -16,6 +18,8 @@ class ActorWorker(mp.Process):
     input_queue: Queue,
     output_queue: Queue,
     seed_seq: np.random.SeedSequence,
+    input_space: Space,
+    output_space: Space,
     actor_class: Type[BaseActor],
     actor_config: Dict = {},
     index: int = 0,
@@ -26,6 +30,8 @@ class ActorWorker(mp.Process):
     self.input_queue = input_queue
     self.output_queue = output_queue
     self.seed_seq = seed_seq
+    self.input_space = input_space
+    self.output_space = output_space
 
     self.actor_class = actor_class
     self.actor_config = actor_config
@@ -33,8 +39,14 @@ class ActorWorker(mp.Process):
     self.index = index
 
   def setup(self):
-    self._set_worker_rng()
-    self.actor = self.actor_class(**self.actor_config)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    set_worker_rng(self.seed_seq)
+    self.actor = self.actor_class(
+      **self.actor_config, 
+      input_space=self.input_space, 
+      output_space=self.output_space
+    )
 
   def run(self):    
     self.setup()
@@ -63,15 +75,6 @@ class ActorWorker(mp.Process):
 
       elif task_type == events.ACTOR_UPDATE_PARAMS_TASK:
         self._update_actor(task)
-
-  def _set_worker_rng(self):
-    np.random.seed(self.seed_seq.generate_state(4))
-
-    torch_seed_seq, py_seed_seq = self.seed_seq.spawn(2)
-    torch.manual_seed(torch_seed_seq.generate_state(1, dtype=np.uint64).item())
-
-    py_seed = (py_seed_seq.generate_state(2, dtype=np.uint64).astype(object) * [1 << 64, 1]).sum()
-    random.seed(py_seed)
 
   def _choose_action(self, obs: torch.Tensor, greedy: bool = False) -> torch.Tensor:
     action = self.actor.choose_action(obs, greedy=greedy)

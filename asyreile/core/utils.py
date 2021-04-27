@@ -1,9 +1,11 @@
 import argparse
+from gym import Space
 import importlib
 import numpy as np
 import pathlib
+import random
 import torch
-from typing import Dict, Type
+from typing import Dict, Tuple, Type
 import yaml
 
 DEFAULT_CONFIG = pathlib.Path("config.yml")
@@ -32,13 +34,24 @@ def get_seed_sequences(config: Dict):
   main_ss = np.random.SeedSequence(entropy=seed)
   print(f"SEED {main_ss.entropy}")
 
-  env_seed_seq, actor_seed_seq, learner_seed_seq, replay_seed_seq = main_ss.spawn(4)
+  env_seed_seq, actor_seed_seq, learner_seed_seq, replay_seed_seq, orchestrator_seed_seq = main_ss.spawn(5)
   return {
     "environment": env_seed_seq,
     "actor": actor_seed_seq,
     "learner": learner_seed_seq,
     "replay": replay_seed_seq,
+    "orchestrator": orchestrator_seed_seq,
   }
+
+
+def set_worker_rng(seed_seq: np.random.SeedSequence):
+  np.random.seed(seed_seq.generate_state(4))
+
+  torch_seed_seq, py_seed_seq = seed_seq.spawn(2)
+  torch.manual_seed(torch_seed_seq.generate_state(1, dtype=np.uint64).item())
+
+  py_seed = (py_seed_seq.generate_state(2, dtype=np.uint64).astype(object) * [1 << 64, 1]).sum()
+  random.seed(py_seed)
 
 
 def get_env_args_from_config(config: Dict) -> Dict:
@@ -68,14 +81,14 @@ def get_actor_args_from_config(config: Dict) -> Dict:
   }
 
 
-def get_net_from_config(config: Dict) -> torch.nn.Module:
+def get_net_from_config(config: Dict, input_size: Tuple[int], output_size: Tuple[int]) -> torch.nn.Module:
   net_path = f"asyreile.networks.{config['path']}"
   net_class_name = config.get("class")
   net_class = get_class_from_module_path(net_path, class_name=net_class_name, class_suffix="Network")
 
   net_config = config.get("conf", {})
 
-  return net_class(**net_config)
+  return net_class(**net_config, input_size=input_size, output_size=output_size)
 
 
 def get_class_from_module_path(module_path, class_name: str = None, class_suffix: str = None) -> Type:
@@ -88,7 +101,18 @@ def get_class_from_module_path(module_path, class_name: str = None, class_suffix
   if not class_name: raise ConfigError(f"Cannot find valid class for module `{module_path}`")
   return getattr(module, class_name)
 
+
 def get_tensor_from_event(event, key):
   t = event[key].clone()
   del event[key]
   return t
+
+
+def get_spaces_from_env_args(env_args: Dict) -> Tuple[Space, Space]:
+  env_class = env_args["env_class"]
+  env_config = env_args["env_config"]
+  tmp_env = env_class(**env_config)
+  observation_space = tmp_env.observation_space
+  action_space = tmp_env.action_space
+  return observation_space, action_space
+
