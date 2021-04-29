@@ -1,5 +1,5 @@
 import numpy as np
-from queue import Queue
+import torch.multiprocessing as mp
 import sys
 import torch
 from threading import Thread
@@ -19,11 +19,12 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
   from asyreile.core.workers.environment import EnvironmentWorker
   from asyreile.core.workers.actor import ActorWorker
 
+  env_args = get_env_args_from_config(config["environment"])
+  observation_space, action_space = get_spaces_from_env_args(env_args)
+
   print("Creating orchestrator...")
   orch = SimpleOrchestrator(seeds["orchestrator"], split_env_processing = 2)
 
-  env_args = get_env_args_from_config(config["environment"])
-  observation_space, action_space = get_spaces_from_env_args(env_args)
 
   print("Creating env workers...")
   env_workers = []
@@ -52,10 +53,33 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
       input_queue=input_queue,
       output_queue=output_queue,
       seed_seq=seed_seq,
+      input_space=observation_space,
+      output_space=action_space,
       index=idx,
       **actor_worker_args,
     )
     actor_workers.append(worker)
+
+  all_workers = [
+    orch,
+    *env_workers,
+    *actor_workers,
+  ]
+
+  print("Starting workers...")
+  for worker in all_workers: worker.start()
+
+  try:
+    for worker in all_workers: worker.join()
+  except (KeyboardInterrupt, Exception) as e:
+    print()
+    print("Terminating workers...")
+    for worker in all_workers: worker.terminate()
+    print(e)
+    for worker in all_workers: worker.join()
+    print("Terminated successfully.")
+  
+  for worker in all_workers: worker.close()
 
 if __name__ == "__main__":
   args = get_args()

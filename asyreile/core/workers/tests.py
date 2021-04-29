@@ -145,7 +145,6 @@ def test_actor_worker(config: Dict, seeds: List[np.random.SeedSequence]):
         print(f"worker {worker_idx}:")
         print({**out, "action": out_action})
 
-        # del out
       elif task == 1:
         state_dicts = json.loads(input("State Dictionaries: "))
         for q in actor_input_queues:

@@ -70,9 +70,7 @@ def get_env_args_from_config(config: Dict) -> Dict:
 def get_actor_args_from_config(config: Dict) -> Dict:
   actor_path = f"asyreile.actors.{config['path']}"
   actor_class_name = config.get("class")
-  print(actor_path)
   actor_class = get_class_from_module_path(actor_path, class_name=actor_class_name, class_suffix="Actor")
-  print(actor_class)
 
   return {
     "actor_class": actor_class,
