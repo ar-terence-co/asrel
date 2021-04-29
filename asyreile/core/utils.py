@@ -54,6 +54,17 @@ def set_worker_rng(seed_seq: np.random.SeedSequence):
   random.seed(py_seed)
 
 
+def get_orchestrator_from_config(config: Dict, seed_seq: np.random.SeedSequence) -> Dict:
+  orch_path = "asyreile.core.orchestrators.simple"
+  orch_class_name = config.get("class")
+  orch_class = get_class_from_module_path(orch_path, class_name=orch_class_name, class_suffix="Orchestrator")
+
+  return orch_class(
+    seed_seq=seed_seq,
+    **config,
+  )
+
+
 def get_env_args_from_config(config: Dict) -> Dict:
   env_path = f"asyreile.environments.{config['path']}"
   env_class_name = config.get("class")

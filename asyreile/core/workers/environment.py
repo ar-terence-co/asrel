@@ -17,7 +17,6 @@ class EnvironmentWorker(mp.Process):
     seed_seq: np.random.SeedSequence,
     env_class: Type[BaseEnvironment],
     num_envs: int = 2,
-    max_episodes: int = 1,
     env_config: Dict = {},
     index: int = 0,
     **kwargs,
@@ -30,7 +29,6 @@ class EnvironmentWorker(mp.Process):
 
     self.env_class = env_class
     self.num_envs = num_envs
-    self.max_episodes = max_episodes
     self.env_config = env_config
 
     self.index = index
@@ -48,7 +46,6 @@ class EnvironmentWorker(mp.Process):
     self.episode_dones = [True for _ in range(self.num_envs)]
     
     self.total_steps = 0
-    self.total_episodes = 0
 
   def run(self):
     self.setup()
@@ -95,8 +92,6 @@ class EnvironmentWorker(mp.Process):
             "env_idx": (self.index, idx),
           })
       
-      if self.total_episodes >= self.max_episodes: break
-
   def _reset_env(self, idx: int) -> Dict:
     obs = self.envs[idx].reset()
 
@@ -113,7 +108,6 @@ class EnvironmentWorker(mp.Process):
     self.episode_steps[idx] += 1
     self.episode_dones[idx] = done
 
-    if done: self.total_episodes += 1
     self.total_steps += 1
 
     return obs, reward, done, info

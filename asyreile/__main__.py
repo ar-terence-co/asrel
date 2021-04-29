@@ -9,13 +9,13 @@ from asyreile.core.utils import (
   get_args, 
   get_config, 
   get_seed_sequences, 
+  get_orchestrator_from_config,
   get_env_args_from_config, 
   get_actor_args_from_config,
   get_spaces_from_env_args,
 )
 
 def main(config: Dict, seeds: List[np.random.SeedSequence]):
-  from asyreile.core.orchestrators.simple import SimpleOrchestrator
   from asyreile.core.workers.environment import EnvironmentWorker
   from asyreile.core.workers.actor import ActorWorker
 
@@ -23,8 +23,7 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
   observation_space, action_space = get_spaces_from_env_args(env_args)
 
   print("Creating orchestrator...")
-  orch = SimpleOrchestrator(seeds["orchestrator"], split_env_processing = 2)
-
+  orch = get_orchestrator_from_config(config["orchestrator"], seeds["orchestrator"])
 
   print("Creating env workers...")
   env_workers = []
@@ -70,16 +69,21 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
   for worker in all_workers: worker.start()
 
   try:
-    for worker in all_workers: worker.join()
+    orch.join()
+    terminate_workers(all_workers)
   except (KeyboardInterrupt, Exception) as e:
     print()
-    print("Terminating workers...")
-    for worker in all_workers: worker.terminate()
     print(e)
-    for worker in all_workers: worker.join()
-    print("Terminated successfully.")
+    terminate_workers(all_workers)
   
-  for worker in all_workers: worker.close()
+  
+def terminate_workers(workers: mp.Process):
+  print("Terminating workers...")
+  for worker in workers: worker.terminate()
+  for worker in workers: worker.join()
+  for worker in workers: worker.close()
+  print("Terminated successfully.")
+
 
 if __name__ == "__main__":
   args = get_args()
@@ -99,5 +103,3 @@ if __name__ == "__main__":
     sys.exit()
 
   main(config, seeds)
-
-  
