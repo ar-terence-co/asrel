@@ -6,7 +6,7 @@ import signal
 import torch
 from typing import Dict, List, Tuple
 
-from asyreile.core.utils import set_worker_rng
+from asyreile.core.utils import set_worker_rng, get_tensor_from_event
 import asyreile.core.workers.events as events
 
 class SimpleOrchestrator(mp.Process):
@@ -79,10 +79,14 @@ class SimpleOrchestrator(mp.Process):
 
   def run(self):
     self.setup()
-    broadcast_env_outputs = Thread(target=self._broadcast_env_outputs)
-    broadcast_env_outputs.start()
+    
+    observation_pipeline = Thread(target=self._observation_pipeline)
+    action_pipeline = Thread(target=self._action_pipeline)
 
-  def _broadcast_env_outputs(self):
+    observation_pipeline.start()
+    action_pipeline.start()
+
+  def _observation_pipeline(self):
     actor_idx = 0
     actor_count = len(self.actor_input_queues)
 
@@ -108,9 +112,10 @@ class SimpleOrchestrator(mp.Process):
       env_idxs = []
       for out in outputs:
         if out["type"] != events.RETURNED_OBSERVATION_EVENT: 
-          continue
+          continue # Note this skips other returned events from the env
         batch_obs.append(out["observation"])
         env_idxs.append(out["env_idx"])
+      print(outputs)
       task = {
         "type": events.ACTOR_CHOOSE_ACTION_TASK,
         "observation": torch.Tensor(batch_obs).to(device),
@@ -122,3 +127,31 @@ class SimpleOrchestrator(mp.Process):
       # Send to actor worker
       self.actor_input_queues[actor_idx].put(task)
       actor_idx = (actor_idx + 1) % actor_count
+
+  def _action_pipeline(self):
+    count = 0
+
+    while True:
+      # Pull from action output queue
+      out = self.actor_output_queues[0].get()
+      print(count, out)
+      if out["type"] != events.RETURNED_ACTION_EVENT: 
+        continue # Note this skips other returned events from the actor
+      actions_t = get_tensor_from_event(out, "action")
+      actions = actions_t.cpu().numpy()
+      env_idxs = out["env_idx"]
+
+      # Split batch observation to correct workers
+      for i, env_idx in enumerate(env_idxs):
+        env_worker_idx, _ = env_idx
+        action = actions[i].item()
+        task = {
+          "type": events.ENV_INTERACT_TASK,
+          "action": action,
+          "env_idx": env_idx,
+        }
+
+        # Send to env worker
+        self.env_input_queues[env_worker_idx].put(task)
+      
+      count += 1
