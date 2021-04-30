@@ -1,29 +1,18 @@
-import numpy as np
 from threading import Thread
 import torch.multiprocessing as mp
 from multiprocessing.queues import Queue, Empty
-import signal
-import timeit
 import torch
 from typing import Dict, List, Tuple
 
-from asyreile.core.utils import set_worker_rng, get_tensor_from_event
+from asyreile.core.utils import get_tensor_from_event
 import asyreile.core.workers.events as events
+from asyreile.orchestrators.base import BaseOrchestrator
 
-class SimpleOrchestrator(mp.Process):
-  def __init__(
-    self,
-    seed_seq: np.random.SeedSequence,
-    max_episodes: int = 100,
-    queue_timeout: int = 60,
-    **kwargs
-  ):
-    super().__init__()
+class SimpleOrchestrator(BaseOrchestrator):
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
 
-    self.seed_seq = seed_seq
-    self.max_episodes = max_episodes
-    self.queue_timeout = queue_timeout
-    
+    self.queue_timeout = kwargs.get("queue_timeout", 60)
     self.has_shared_env_queue = kwargs.get("has_shared_env_queue", False)
     if self.has_shared_env_queue:
       self.shared_env_queue_pull_count = kwargs.get("shared_env_queue_pull_count", 1)
@@ -71,44 +60,20 @@ class SimpleOrchestrator(mp.Process):
     return idx, input_queue, output_queue
 
   def setup(self):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    set_worker_rng(self.seed_seq)
-
     if self.has_shared_env_queue:
       self.env_pulls = [self.shared_env_queue_pull_count]
     else:
       # NOTE: this expects the number of envs to be divisible by split_env_processing
       self.env_pulls = [c // self.split_env_processing for c in self.env_counts]
+    self.env_stopped = [[False for _ in range(num_envs)] for num_envs in self.env_counts]
 
     self.actor_devices = [torch.device(device_name) for device_name in self.actor_device_names]
 
-    self.env_stopped = [[False for _ in range(num_envs)] for num_envs in self.env_counts]
-    self.total_episodes = 0
-    self.total_steps = 0
-
-    self.running = True
-
-  def run(self):
-    start_time = timeit.default_timer()
-
-    self.setup()
-    
+  def create_pipelines(self) -> List[Thread]:
     observation_pipeline = Thread(target=self._observation_pipeline)
     action_pipeline = Thread(target=self._action_pipeline)
 
-    observation_pipeline.start()
-    action_pipeline.start()
-
-    observation_pipeline.join()
-    action_pipeline.join()
-
-    print(f"{self.total_episodes} episodes finished. {self.total_steps} steps ran. Orchestration ended.")
-
-    end_time = timeit.default_timer()
-    duration = end_time - start_time
-    print(f"Duration: {duration} seconds")
-    print(f"Average time steps per second: {duration / self.total_steps}")
+    return [observation_pipeline, action_pipeline]
 
   def _observation_pipeline(self):
     actor_idx = 0

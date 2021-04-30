@@ -55,13 +55,14 @@ def set_worker_rng(seed_seq: np.random.SeedSequence):
 
 
 def get_orchestrator_from_config(config: Dict, seed_seq: np.random.SeedSequence) -> Dict:
-  orch_path = "asyreile.core.orchestrators.simple"
+  orch_path = f"asyreile.orchestrators.{config['path']}"
   orch_class_name = config.get("class")
   orch_class = get_class_from_module_path(orch_path, class_name=orch_class_name, class_suffix="Orchestrator")
 
   return orch_class(
     seed_seq=seed_seq,
-    **config,
+    max_episodes=config.get("max_episodes", 100),
+    **config.get("conf", {}),
   )
 
 
