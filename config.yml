@@ -1,15 +1,7 @@
-orchestrator:
-  path: simple
-  max_episodes: 1000
-  conf:
-    queue_timeout: 60
-    has_shared_env_queue: false
-    split_env_processing: 2
-
 environment:
   path: gym.atari
   num_workers: 4
-  num_envs_per_worker: 2
+  num_envs_per_worker: 3
   conf:
     id: Acrobot-v1
 
@@ -23,4 +15,16 @@ actor:
       conf:
         hidden_layers: [256, 256]
 
+pipelines:
+  - path: observation.standard
+    conf:
+      batch_split: 3
+  - path: action.standard
+
+registry:
+  shared:
+    environment: false
+    actor: true
+
 seed: 1234567890
+max_episodes: 1000

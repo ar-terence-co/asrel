@@ -9,6 +9,7 @@ from asyreile.core.utils import (
   get_args, 
   get_config, 
   get_seed_sequences, 
+  get_registry_args_from_config,
   get_orchestrator_from_config,
   get_env_args_from_config, 
   get_actor_args_from_config,
@@ -16,22 +17,29 @@ from asyreile.core.utils import (
 )
 
 def main(config: Dict, seeds: List[np.random.SeedSequence]):
+  from asyreile.core.orchestrator import Orchestrator
+  from asyreile.core.registry import WorkerRegistry
   from asyreile.core.workers.environment import EnvironmentWorker
   from asyreile.core.workers.actor import ActorWorker
 
   env_args = get_env_args_from_config(config["environment"])
   observation_space, action_space = get_spaces_from_env_args(env_args)
 
-  print("Creating orchestrator...")
-  orch = get_orchestrator_from_config(config["orchestrator"], seeds["orchestrator"])
+  print("Creating registry...")
+  registry_args = get_registry_args_from_config(config["registry"])
+  registry = WorkerRegistry(**registry_args)
+
+  # print("Creating orchestrator...")
+  # orch = get_orchestrator_from_config(config["orchestrator"], seeds["orchestrator"])
 
   print("Creating env workers...")
   env_workers = []
   env_worker_args = env_args
   num_workers = env_worker_args["num_workers"]
+  num_envs = env_worker_args["num_envs"]
   env_worker_seed_seqs = seeds["environment"].spawn(num_workers)
   for seed_seq in env_worker_seed_seqs:
-    idx, input_queue, output_queue = orch.register_env_worker(env_worker_args)
+    idx, input_queue, output_queue = registry.register("environment", env_worker_args, maxsize=num_envs)
     worker = EnvironmentWorker(
       input_queue=input_queue,
       output_queue=output_queue,
@@ -47,7 +55,7 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
   num_workers = actor_worker_args["num_workers"]
   actor_worker_seed_seqs = seeds["actor"].spawn(num_workers)
   for seed_seq in actor_worker_seed_seqs:
-    idx, input_queue, output_queue = orch.register_actor_worker(actor_worker_args)
+    idx, input_queue, output_queue = registry.register("actor", actor_worker_args)
     worker = ActorWorker(
       input_queue=input_queue,
       output_queue=output_queue,
@@ -58,6 +66,14 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
       **actor_worker_args,
     )
     actor_workers.append(worker)
+
+  print("Creating orchestrator...")
+  orch = Orchestrator(
+    registry=registry,
+    seed_seq=seeds["orchestrator"],
+    pipeline_config=config["pipelines"],
+    max_episodes=config.get("max_episodes", 100),
+  )
 
   all_workers = [
     orch,

@@ -3,7 +3,7 @@ import torch.multiprocessing as mp
 from typing import Dict, Tuple
 
 class WorkerRegistry:
-  def __init__(self, shared = {}):
+  def __init__(self, shared = {}, **kwargs):
     self.input_queues = {}
     self.output_queues = {}
     self.configs = {}
@@ -33,7 +33,7 @@ class WorkerRegistry:
 
     output_queues = self.output_queues[worker_type]
     if self.shared.get(worker_type, False):
-      if len(output_queues):
+      if len(output_queues) == 0:
         output_queues.append(mp.Queue(maxsize=0))
       output_queue = output_queues[0]
     else:

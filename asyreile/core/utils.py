@@ -53,6 +53,10 @@ def set_worker_rng(seed_seq: np.random.SeedSequence):
   py_seed = (py_seed_seq.generate_state(2, dtype=np.uint64).astype(object) * [1 << 64, 1]).sum()
   random.seed(py_seed)
 
+def get_registry_args_from_config(config: Dict) -> Dict:
+  return {
+    "shared": config.get("shared", {})
+  }
 
 def get_orchestrator_from_config(config: Dict, seed_seq: np.random.SeedSequence) -> Dict:
   orch_path = f"asyreile.orchestrators.{config['path']}"
@@ -64,7 +68,6 @@ def get_orchestrator_from_config(config: Dict, seed_seq: np.random.SeedSequence)
     max_episodes=config.get("max_episodes", 100),
     **config.get("conf", {}),
   )
-
 
 def get_env_args_from_config(config: Dict) -> Dict:
   env_path = f"asyreile.environments.{config['path']}"
@@ -101,10 +104,21 @@ def get_net_from_config(config: Dict, input_size: Tuple[int], output_size: Tuple
   return net_class(**net_config, input_size=input_size, output_size=output_size)
 
 
+def get_pipeline_args_from_config(config: Dict) -> Dict:
+  pipeline_path = f"asyreile.pipelines.{config['path']}"
+  pipeline_class_name = config.get("class")
+  pipeline_class = get_class_from_module_path(pipeline_path, class_name=pipeline_class_name, class_suffix="Pipeline")
+
+  return {
+    "pipeline_class": pipeline_class,
+    "pipeline_config": config.get("conf", {})
+  }
+
+
 def get_class_from_module_path(module_path, class_name: str = None, class_suffix: str = None) -> Type:
   module = importlib.import_module(module_path)
   if not class_name and class_suffix:
-    for name in dir(module):
+    for name in reversed(dir(module)):
       if name.endswith(class_suffix) and name != f"Base{class_suffix}":
         class_name = name
         break
