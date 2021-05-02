@@ -6,6 +6,7 @@ class WorkerRegistry:
   def __init__(self, shared = {}, **kwargs):
     self.input_queues = {}
     self.output_queues = {}
+    self.buffer_queues = {}
     self.configs = {}
 
     self.shared = shared
@@ -41,4 +42,20 @@ class WorkerRegistry:
       output_queues.append(output_queue)
 
     return idx, input_queue, output_queue
+
+  def register_buffer(
+    self,
+    worker_type,
+    maxsize: int = 0,
+  ):
+    if worker_type not in self.buffer_queues:
+      self.buffer_queues[worker_type] = []
+    
+    buffer_queues = self.buffer_queues[worker_type]
+    buffer_queue = mp.Queue(maxsize=maxsize)
+    buffer_queues.append(buffer_queue)
+
+    idx = len(buffer_queues) - 1
+
+    return idx, buffer_queue
     

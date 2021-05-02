@@ -94,6 +94,19 @@ def get_actor_args_from_config(config: Dict) -> Dict:
   }
 
 
+def get_replay_args_from_config(config: Dict) -> Dict:
+  replay_path = f"asyreile.replays.{config['path']}"
+  replay_class_name = config.get("class")
+  replay_class = get_class_from_module_path(replay_path, class_name=replay_class_name, class_suffix="Replay")
+
+  return {
+    "replay_class": replay_class,
+    "buffer_size": config.get("buffer_size", 16),
+    "warmup_steps": config.get("warmup_steps", 0),
+    "replay_config": config.get("conf", {})
+  }
+
+
 def get_net_from_config(config: Dict, input_size: Tuple[int], output_size: Tuple[int]) -> torch.nn.Module:
   net_path = f"asyreile.networks.{config['path']}"
   net_class_name = config.get("class")

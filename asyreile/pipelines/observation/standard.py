@@ -14,12 +14,15 @@ class StandardObservationPipeline(BasePipeline):
     self,
     batch_count: int = 0,
     batch_split: int = 2,
+    discount: float = 0.99,
+    n_steps: int = 1,
     **kwargs,
   ):
     super().__init__(**kwargs)
     
     self.env_output_queues = self.registry.output_queues["environment"]
     self.actor_input_queues = self.registry.input_queues["actor"]
+    self.learner_input_queue = self.registry.input_queues["learner"][0]
 
     self.env_q_count = len(self.env_output_queues)
     self.actor_q_count = len(self.actor_input_queues)
@@ -38,6 +41,12 @@ class StandardObservationPipeline(BasePipeline):
       for config in self.registry.configs["actor"]
     ]
 
+    if "experiences" not in self.shared_dict:
+      self.shared_dict["experiences"] = {}
+
+    self.discount = discount
+    self.n_steps = n_steps
+
   def run(self):
     actor_idx = 0
 
@@ -49,8 +58,16 @@ class StandardObservationPipeline(BasePipeline):
           self.process_state["running"] = False
         continue
 
+      for output in outputs:
+        to_learner = self._update_experiences(output)
+        for exp in to_learner:
+          task = {
+            "type": events.LEARNER_ADD_EXPERIENCE_TASK,
+            "experience": exp,
+          }
+          self.learner_input_queue.put(task)
+
       batch_obs, env_idxs = self._process_batch_outputs(outputs)
-      
       task = {
         "type": events.ACTOR_CHOOSE_ACTION_TASK,
         "observation": torch.Tensor(batch_obs).to(self.actor_devices[actor_idx]),
@@ -58,8 +75,8 @@ class StandardObservationPipeline(BasePipeline):
         "env_idx": env_idxs,
         "actor_idx": actor_idx,
       }
-
       self.actor_input_queues[actor_idx].put(task)
+
       actor_idx = (actor_idx + 1) % self.actor_q_count
       
   def _get_batch_per_worker(
@@ -128,3 +145,37 @@ class StandardObservationPipeline(BasePipeline):
           self.envs_completed[worker_idx][sub_idx] = True
 
     return batch_obs, env_idxs
+
+  def _update_experiences(self, output) -> List[Dict]:
+    env_idx = output["env_idx"]
+    if env_idx not in self.shared_dict["experiences"]:
+      self.shared_dict["experiences"][env_idx] = []
+    
+    env_exps = self.shared_dict["experiences"][env_idx]
+    for exp in env_exps:
+      exp["return"] += self.discount * output["reward"]
+    
+    to_learner = []
+    if output["episode_done"]:
+      while len(env_exps):
+        exp = env_exps.pop()
+        exp.update({
+          "nth_state": output["observation"],
+          "done": True,
+        })
+        to_learner.append(exp)
+    else:
+      if len(env_exps) >= self.n_steps:
+        exp = env_exps.pop()
+        exp.update({
+          "nth_state": output["observation"],
+          "done": False,
+        })
+        to_learner.append(exp)
+
+      env_exps.insert(0, {
+        "state": output["observation"],
+        "return": 0.,
+      })
+
+    return to_learner

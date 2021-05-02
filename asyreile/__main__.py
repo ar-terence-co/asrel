@@ -1,6 +1,7 @@
 import numpy as np
 import torch.multiprocessing as mp
 import sys
+import time
 import torch
 from threading import Thread
 from typing import Dict, List
@@ -13,6 +14,7 @@ from asyreile.core.utils import (
   get_orchestrator_from_config,
   get_env_args_from_config, 
   get_actor_args_from_config,
+  get_replay_args_from_config,
   get_spaces_from_env_args,
 )
 
@@ -21,16 +23,16 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
   from asyreile.core.registry import WorkerRegistry
   from asyreile.core.workers.environment import EnvironmentWorker
   from asyreile.core.workers.actor import ActorWorker
+  from asyreile.core.workers.replay import ReplayWorker
 
   env_args = get_env_args_from_config(config["environment"])
   observation_space, action_space = get_spaces_from_env_args(env_args)
+  
+  batch_size = config.get("batch_size", 256)
 
   print("Creating registry...")
   registry_args = get_registry_args_from_config(config["registry"])
   registry = WorkerRegistry(**registry_args)
-
-  # print("Creating orchestrator...")
-  # orch = get_orchestrator_from_config(config["orchestrator"], seeds["orchestrator"])
 
   print("Creating env workers...")
   env_workers = []
@@ -67,6 +69,22 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
     )
     actor_workers.append(worker)
 
+  idx, input_queue, output_queue = registry.register("learner", {})
+  
+  print("Creating replay worker...")
+  replay_worker_args = get_replay_args_from_config(config["replay"])
+  buffer_size = replay_worker_args["buffer_size"]
+
+  idx, buffer_queue = registry.register_buffer("replay", maxsize=buffer_size)
+  replay_worker = ReplayWorker(
+    input_queue=input_queue,
+    buffer_queue=buffer_queue,
+    seed_seq=seeds["replay"],
+    batch_size=batch_size,
+    index=idx,
+    **replay_worker_args,
+  )
+
   print("Creating orchestrator...")
   orch = Orchestrator(
     registry=registry,
@@ -79,12 +97,16 @@ def main(config: Dict, seeds: List[np.random.SeedSequence]):
     orch,
     *env_workers,
     *actor_workers,
+    replay_worker,
   ]
 
   print("Starting workers...")
   for worker in all_workers: worker.start()
 
   try:
+    for _ in range(100000):
+      buffer_queue.get()
+    print("Got 100,000 replays")
     orch.join()
     terminate_workers(all_workers)
   except (KeyboardInterrupt, Exception) as e:

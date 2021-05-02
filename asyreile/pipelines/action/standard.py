@@ -22,6 +22,9 @@ class StandardActionPipeline(BasePipeline):
     self.actor_q_count = len(self.actor_output_queues)
     self.env_q_count = len(self.env_input_queues)
 
+    if "experiences" not in self.shared_dict:
+      self.shared_dict["experiences"] = {}
+
   def run(self):
     actor_idx = 0
 
@@ -32,6 +35,9 @@ class StandardActionPipeline(BasePipeline):
       batch_actions, env_idxs = self._process_output(output)
 
       for i, env_idx in enumerate(env_idxs):
+        action = batch_actions[i].item()
+        self._update_experiences(action, env_idx)
+        
         task = {
           "type": events.ENV_INTERACT_TASK,
           "action": batch_actions[i].item(),
@@ -60,3 +66,12 @@ class StandardActionPipeline(BasePipeline):
     env_idxs = output["env_idx"]
 
     return batch_actions, env_idxs
+
+  def _update_experiences(self, action: int, env_idx: Tuple[int, int]):
+    if env_idx not in self.shared_dict["experiences"]:
+      self.shared_dict["experiences"][env_idx] = []
+    
+    env_exps = self.shared_dict["experiences"][env_idx]
+
+    if len(env_exps) and "action" not in env_exps[0]:
+      env_exps[0]["action"] = action
