@@ -12,6 +12,7 @@ class BasePipeline(Thread):
     shared_dict: Dict,
     process_state: Dict,
     queue_timeout: int = 60,
+    global_config: Dict = {},
     **kwargs,
   ):
     super().__init__()
@@ -20,6 +21,7 @@ class BasePipeline(Thread):
     self.shared_dict = shared_dict
     self.process_state = process_state
     self.queue_timeout = queue_timeout
+    self.global_config = global_config
 
   @abstractmethod
   def run(self):

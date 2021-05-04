@@ -14,15 +14,13 @@ class StandardObservationPipeline(BasePipeline):
     self,
     batch_count: int = 0,
     batch_split: int = 2,
-    discount: float = 0.99,
-    n_steps: int = 1,
     **kwargs,
   ):
     super().__init__(**kwargs)
     
     self.env_output_queues = self.registry.output_queues["environment"]
     self.actor_input_queues = self.registry.input_queues["actor"]
-    self.learner_input_queue = self.registry.input_queues["learner"][0]
+    self.store_input_queue = self.registry.input_queues["store"][0]
 
     self.env_q_count = len(self.env_output_queues)
     self.actor_q_count = len(self.actor_input_queues)
@@ -44,8 +42,9 @@ class StandardObservationPipeline(BasePipeline):
     if "experiences" not in self.shared_dict:
       self.shared_dict["experiences"] = {}
 
-    self.discount = discount
-    self.n_steps = n_steps
+    self.max_episodes = self.global_config.get("max_episodes", 100)
+    self.n_steps = self.global_config.get("n_steps", 1)
+    self.gamma = self.global_config.get("gamma", 1.0)
 
   def run(self):
     actor_idx = 0
@@ -54,23 +53,23 @@ class StandardObservationPipeline(BasePipeline):
       outputs = self._get_batch_outputs()
 
       if not outputs:
-        if self.process_state["total_episodes"] >= self.process_state["max_episodes"]:
+        if self.process_state["total_episodes"] >= self.max_episodes:
           self.process_state["running"] = False
         continue
 
       for output in outputs:
-        to_learner = self._update_experiences(output)
-        for exp in to_learner:
+        to_store = self._update_experiences(output)
+        for exp in to_store:
           task = {
-            "type": events.LEARNER_ADD_EXPERIENCE_TASK,
+            "type": events.STORE_ADD_EXPERIENCE_TASK,
             "experience": exp,
           }
-          self.learner_input_queue.put(task)
+          self.store_input_queue.put(task)
 
       batch_obs, env_idxs = self._process_batch_outputs(outputs)
       task = {
         "type": events.ACTOR_CHOOSE_ACTION_TASK,
-        "observation": torch.Tensor(batch_obs).to(self.actor_devices[actor_idx]),
+        "observation": torch.tensor(batch_obs).to(self.actor_devices[actor_idx]),
         "greedy": False,
         "env_idx": env_idxs,
         "actor_idx": actor_idx,
@@ -140,7 +139,7 @@ class StandardObservationPipeline(BasePipeline):
 
       if output["episode_done"]:
         self.process_state["total_episodes"] += 1
-        if self.process_state["total_episodes"] >= self.process_state["max_episodes"]:
+        if self.process_state["total_episodes"] >= self.max_episodes:
           worker_idx, sub_idx = output["env_idx"]
           self.envs_completed[worker_idx][sub_idx] = True
 
@@ -152,10 +151,10 @@ class StandardObservationPipeline(BasePipeline):
       self.shared_dict["experiences"][env_idx] = []
     
     env_exps = self.shared_dict["experiences"][env_idx]
-    for exp in env_exps:
-      exp["return"] += self.discount * output["reward"]
+    for i, exp in enumerate(env_exps):
+      exp["return"] += (self.gamma**i) * output["reward"]
     
-    to_learner = []
+    to_store = []
     if output["episode_done"]:
       while len(env_exps):
         exp = env_exps.pop()
@@ -163,7 +162,7 @@ class StandardObservationPipeline(BasePipeline):
           "nth_state": output["observation"],
           "done": True,
         })
-        to_learner.append(exp)
+        to_store.append(exp)
     else:
       if len(env_exps) >= self.n_steps:
         exp = env_exps.pop()
@@ -171,11 +170,11 @@ class StandardObservationPipeline(BasePipeline):
           "nth_state": output["observation"],
           "done": False,
         })
-        to_learner.append(exp)
+        to_store.append(exp)
 
       env_exps.insert(0, {
         "state": output["observation"],
         "return": 0.,
       })
 
-    return to_learner
+    return to_store

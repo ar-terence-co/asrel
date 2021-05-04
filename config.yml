@@ -1,3 +1,17 @@
+seed: 1234567890
+global: 
+  checkpoint_dir: ".models"
+  max_episodes: 1000
+  batch_size: 16
+
+  n_steps: 1
+  gamma: 0.99
+  epsilon: 1.0
+  epsilon_dec: 1.e-4
+  epsilon_end: 1.e-3
+
+  signal_check: 3 
+
 environment:
   path: gym.atari
   num_workers: 4
@@ -15,24 +29,36 @@ actor:
       conf:
         hidden_layers: [256, 256]
 
-replay:
-  path: standard
+store:
+  path: exp_replay
+  class: ExperienceReplay
   buffer_size: 16
   warmup_steps: 1024
   conf: 
     maxsize: 100000
-    
+    types:
+      action: int32
+
+learner:
+  path: classic.dqn
+  conf:
+    device: cuda
+    net:
+      path: feed_forward
+      conf:
+        hidden_layers: [256, 256]
+        optimizer:
+          name: Adam
+          lr: 1.e-3
+
 pipelines:
   - path: observation.standard
     conf:
       batch_split: 3
   - path: action.standard
+  - path: dataset.standard
 
 registry:
   shared:
     environment: false
     actor: true
-
-seed: 1234567890
-max_episodes: 1000
-batch_size: 4

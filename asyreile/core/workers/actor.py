@@ -17,10 +17,9 @@ class ActorWorker(mp.Process):
     input_queue: Queue,
     output_queue: Queue,
     seed_seq: np.random.SeedSequence,
-    input_space: Space,
-    output_space: Space,
     actor_class: Type[BaseActor],
     actor_config: Dict = {},
+    global_config: Dict = {},
     index: int = 0,
     **kwargs,
   ):
@@ -29,22 +28,22 @@ class ActorWorker(mp.Process):
     self.input_queue = input_queue
     self.output_queue = output_queue
     self.seed_seq = seed_seq
-    self.input_space = input_space
-    self.output_space = output_space
 
     self.actor_class = actor_class
     self.actor_config = actor_config
 
+    self.global_config = global_config
     self.index = index
 
   def setup(self):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+    print(f"Started {mp.current_process().name}.")
+
     set_worker_rng(self.seed_seq)
     self.actor = self.actor_class(
       **self.actor_config, 
-      input_space=self.input_space, 
-      output_space=self.output_space
+      global_config=self.global_config,
     )
 
   def run(self):    
@@ -74,6 +73,14 @@ class ActorWorker(mp.Process):
 
       elif task_type == events.ACTOR_UPDATE_PARAMS_TASK:
         self._update_actor(task)
+
+      elif task_type == events.WORKER_TERMINATE_TASK:
+        break
+
+    self.cleanup()
+
+  def cleanup(self):
+    print(f"Terminated {mp.current_process().name}.")
 
   def _choose_action(self, obs: torch.Tensor, greedy: bool = False) -> torch.Tensor:
     action = self.actor.choose_action(obs, greedy=greedy)

@@ -5,11 +5,12 @@ import numpy as np
 import pathlib
 import random
 import torch
-from typing import Dict, Tuple, Type
+from typing import Any, Dict, Optional, Tuple, Type
 import yaml
 
 DEFAULT_CONFIG = pathlib.Path("config.yml")
-
+DEFAULT_CHECKPOINT_DIR = pathlib.Path(".networks")
+DEFAULT_DEVICE = torch.device("cpu")
 
 class ConfigError(Exception): pass
 
@@ -34,24 +35,25 @@ def get_seed_sequences(config: Dict):
   main_ss = np.random.SeedSequence(entropy=seed)
   print(f"SEED {main_ss.entropy}")
 
-  env_seed_seq, actor_seed_seq, learner_seed_seq, replay_seed_seq, orchestrator_seed_seq = main_ss.spawn(5)
+  env_seed_seq, actor_seed_seq, learner_seed_seq, store_seed_seq, orchestrator_seed_seq = main_ss.spawn(5)
   return {
     "environment": env_seed_seq,
     "actor": actor_seed_seq,
     "learner": learner_seed_seq,
-    "replay": replay_seed_seq,
+    "store": store_seed_seq,
     "orchestrator": orchestrator_seed_seq,
   }
 
 
 def set_worker_rng(seed_seq: np.random.SeedSequence):
-  np.random.seed(seed_seq.generate_state(4))
+  np_seed_seq, torch_seed_seq, py_seed_seq = seed_seq.spawn(3)
 
-  torch_seed_seq, py_seed_seq = seed_seq.spawn(2)
+  np.random.seed(np_seed_seq.generate_state(4))
   torch.manual_seed(torch_seed_seq.generate_state(1, dtype=np.uint64).item())
-
   py_seed = (py_seed_seq.generate_state(2, dtype=np.uint64).astype(object) * [1 << 64, 1]).sum()
   random.seed(py_seed)
+
+  return np_seed_seq, torch_seed_seq, py_seed_seq
 
 def get_registry_args_from_config(config: Dict) -> Dict:
   return {
@@ -90,31 +92,41 @@ def get_actor_args_from_config(config: Dict) -> Dict:
   return {
     "actor_class": actor_class,
     "num_workers": config.get("num_workers", 1),
-    "actor_config": config.get("conf", {})
+    "actor_config": config.get("conf", {}),
   }
 
 
-def get_replay_args_from_config(config: Dict) -> Dict:
-  replay_path = f"asyreile.replays.{config['path']}"
-  replay_class_name = config.get("class")
-  replay_class = get_class_from_module_path(replay_path, class_name=replay_class_name, class_suffix="Replay")
+def get_store_args_from_config(config: Dict) -> Dict:
+  store_path = f"asyreile.stores.{config['path']}"
+  store_class_name = config.get("class")
+  store_class = get_class_from_module_path(store_path, class_name=store_class_name, class_suffix="ExperienceStore")
 
   return {
-    "replay_class": replay_class,
+    "store_class": store_class,
     "buffer_size": config.get("buffer_size", 16),
     "warmup_steps": config.get("warmup_steps", 0),
-    "replay_config": config.get("conf", {})
+    "store_config": config.get("conf", {})
+  }
+
+def get_learner_args_from_config(config: Dict) -> Dict:
+  learner_path = f"asyreile.learners.{config['path']}"
+  learner_class_name = config.get("class")
+  learner_class = get_class_from_module_path(learner_path, class_name=learner_class_name, class_suffix="Learner")
+
+  return {
+    "learner_class": learner_class,
+    "learner_config": config.get("conf", {}),
   }
 
 
-def get_net_from_config(config: Dict, input_size: Tuple[int], output_size: Tuple[int]) -> torch.nn.Module:
+def get_net_from_config(config: Dict, **kwargs) -> torch.nn.Module:
   net_path = f"asyreile.networks.{config['path']}"
   net_class_name = config.get("class")
   net_class = get_class_from_module_path(net_path, class_name=net_class_name, class_suffix="Network")
 
   net_config = config.get("conf", {})
 
-  return net_class(**net_config, input_size=input_size, output_size=output_size)
+  return net_class(**net_config, **kwargs)
 
 
 def get_pipeline_args_from_config(config: Dict) -> Dict:
@@ -152,4 +164,17 @@ def get_spaces_from_env_args(env_args: Dict) -> Tuple[Space, Space]:
   observation_space = tmp_env.observation_space
   action_space = tmp_env.action_space
   return observation_space, action_space
+
+def get_instance_from_config(module: Any, name: str = "", default_class: Optional[Type] = None, **kwargs) -> Any:
+  try:
+    class_ = getattr(module, name)
+  except AttributeError:
+    if not default_class: return None
+    class_ = default_class
+  
+  return class_(**kwargs)
+
+
+def noop(*args, **kwargs):
+  pass
 

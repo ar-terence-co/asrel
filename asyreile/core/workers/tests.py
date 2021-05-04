@@ -129,7 +129,7 @@ def test_actor_worker(config: Dict, seeds: List[np.random.SeedSequence]):
         worker_idx = int(input(" worker: ",))
 
         num_obs = int(input(" # of obs: "))
-        obs = torch.Tensor([input_space.sample() for _ in range(num_obs)]).cuda()
+        obs = torch.tensor([input_space.sample() for _ in range(num_obs)]).cuda()
         print(f" obs:\n{obs}")
         env_worker_idx = int(input(" env worker:   "))
         env_sub_idx = int(input("     subenv:   "))

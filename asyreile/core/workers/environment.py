@@ -1,6 +1,5 @@
 import torch.multiprocessing as mp
 from multiprocessing.queues import Queue
-from multiprocessing import Process
 import numpy as np
 import signal
 from typing import Any, Dict, List, Type
@@ -18,6 +17,7 @@ class EnvironmentWorker(mp.Process):
     env_class: Type[BaseEnvironment],
     num_envs: int = 2,
     env_config: Dict = {},
+    global_config: Dict = {},
     index: int = 0,
     **kwargs,
   ):
@@ -31,10 +31,13 @@ class EnvironmentWorker(mp.Process):
     self.num_envs = num_envs
     self.env_config = env_config
 
+    self.global_config = global_config
     self.index = index
 
   def setup(self):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+    print(f"Started {mp.current_process().name}.")
 
     self.envs = [self.env_class(**self.env_config) for _ in range(self.num_envs)]
     self.env_seed_seqs = self.seed_seq.spawn(self.num_envs)
@@ -64,8 +67,9 @@ class EnvironmentWorker(mp.Process):
 
     while True:
       task = self.input_queue.get()
+      task_type = task["type"]
 
-      if task["type"] == events.ENV_INTERACT_TASK:
+      if task_type == events.ENV_INTERACT_TASK:
         _, idx = task["env_idx"]
 
         if self.episode_dones[idx]:
@@ -91,7 +95,15 @@ class EnvironmentWorker(mp.Process):
             "task_done": done and not info.get("TimeLimit.truncated", False),
             "env_idx": (self.index, idx),
           })
+
+      elif task_type == events.WORKER_TERMINATE_TASK:
+        break
+
+    self.cleanup()
       
+  def cleanup(self):
+    print(f"Terminated {mp.current_process().name}.")
+
   def _reset_env(self, idx: int) -> Dict:
     obs = self.envs[idx].reset()
 

@@ -1,18 +1,18 @@
 import numpy as np
 from typing import Dict
 
-from asyreile.replays.base import BaseReplay
+from asyreile.stores.base import BaseExperienceStore
 
 
-class StandardReplay(BaseReplay):
+class ExperienceReplay(BaseExperienceStore):
   def __init__(
     self,
-    batch_size: int = 256,
     maxsize: int = 100000,
     types: Dict[str, str] = {},
     **kwargs,
   ):
-    self.batch_size = batch_size
+    super().__init__(**kwargs)
+
     self.maxsize = maxsize
     self.types = types
 
@@ -22,7 +22,7 @@ class StandardReplay(BaseReplay):
 
     self.replay_dict = None    
 
-  def store(self, experience: Dict):
+  def add(self, experience: Dict):
     if not self.replay_dict:
       self.replay_dict = self._create_replay_dict(experience)
 

@@ -6,7 +6,6 @@ class WorkerRegistry:
   def __init__(self, shared = {}, **kwargs):
     self.input_queues = {}
     self.output_queues = {}
-    self.buffer_queues = {}
     self.configs = {}
 
     self.shared = shared
@@ -15,7 +14,8 @@ class WorkerRegistry:
     self,
     worker_type: str, 
     config: Dict,
-    maxsize: int = 0,
+    input_maxsize: int = 0,
+    output_maxsize: int = 0,
   ) -> Tuple[int, Queue, Queue]:
     if worker_type not in self.configs:
       self.configs[worker_type] = []
@@ -29,7 +29,7 @@ class WorkerRegistry:
     idx = len(configs) - 1
 
     input_queues = self.input_queues[worker_type]
-    input_queue = mp.Queue(maxsize=maxsize)
+    input_queue = mp.Queue(maxsize=input_maxsize)
     input_queues.append(input_queue)
 
     output_queues = self.output_queues[worker_type]
@@ -38,24 +38,7 @@ class WorkerRegistry:
         output_queues.append(mp.Queue(maxsize=0))
       output_queue = output_queues[0]
     else:
-      output_queue = mp.Queue(maxsize=maxsize)
+      output_queue = mp.Queue(maxsize=output_maxsize)
       output_queues.append(output_queue)
 
     return idx, input_queue, output_queue
-
-  def register_buffer(
-    self,
-    worker_type,
-    maxsize: int = 0,
-  ):
-    if worker_type not in self.buffer_queues:
-      self.buffer_queues[worker_type] = []
-    
-    buffer_queues = self.buffer_queues[worker_type]
-    buffer_queue = mp.Queue(maxsize=maxsize)
-    buffer_queues.append(buffer_queue)
-
-    idx = len(buffer_queues) - 1
-
-    return idx, buffer_queue
-    
