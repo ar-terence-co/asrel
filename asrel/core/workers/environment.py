@@ -4,6 +4,7 @@ import numpy as np
 import signal
 from typing import Any, Dict, List, Type
 
+from asrel.core.utils import validate_subclass
 import asrel.core.workers.events as events
 from asrel.environments.base import BaseEnvironment
 
@@ -27,6 +28,7 @@ class EnvironmentWorker(mp.Process):
     self.output_queue = output_queue
     self.seed_seq = seed_seq
 
+    validate_subclass(env_class, BaseEnvironment)
     self.env_class = env_class
     self.num_envs = num_envs
     self.env_config = env_config

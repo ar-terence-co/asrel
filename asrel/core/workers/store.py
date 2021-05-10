@@ -6,9 +6,9 @@ from threading import Thread
 import time
 from typing import Dict, Type
 
-from asrel.stores.base import BaseExperienceStore
+from asrel.core.utils import take_tensor_from_dict, set_worker_rng, validate_subclass
 import asrel.core.workers.events as events
-from asrel.core.utils import take_tensor_from_dict, set_worker_rng
+from asrel.stores.base import BaseExperienceStore
 
 WARMUP_WAIT = 3 # secs
 
@@ -31,6 +31,7 @@ class ExperienceStoreWorker(mp.Process):
     self.output_queue = output_queue
     self.seed_seq = seed_seq
 
+    validate_subclass(store_class, BaseExperienceStore)
     self.store_class = store_class
     self.store_config = store_config
 

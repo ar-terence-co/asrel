@@ -6,7 +6,7 @@ import signal
 import torch
 from typing import Dict, Iterable, List, Type
 
-from asrel.core.utils import set_worker_rng, take_tensor_from_dict
+from asrel.core.utils import set_worker_rng, take_tensor_from_dict, validate_subclass
 import asrel.core.workers.events as events
 from asrel.learners.base import BaseLearner
 
@@ -29,6 +29,7 @@ class LearnerWorker(mp.Process):
     self.output_queue = output_queue
     self.seed_seq = seed_seq
 
+    validate_subclass(learner_class, BaseLearner)
     self.learner_class = learner_class
     self.learner_config = learner_config
 

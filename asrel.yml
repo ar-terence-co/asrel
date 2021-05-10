@@ -8,24 +8,24 @@ global:
   gamma: 0.99
 
 environment:
-  path: gym.atari
+  path: asrel.environments.gym.atari
   num_workers: 4
   num_envs_per_worker: 3
   conf:
     id: Acrobot-v1
 
 actor:
-  path: discrete.greedy
+  path: asrel.actors.discrete.greedy
   num_workers: 1
   conf: 
     device: cuda
     net:
-      path: feed_forward
+      path: asrel.networks.feed_forward
       conf:
         hidden_layers: [256, 256]
 
 store:
-  path: exp_replay
+  path: asrel.stores.exp_replay
   class: ExperienceReplay
   buffer_size: 16
   warmup_steps: 1024
@@ -35,11 +35,11 @@ store:
       action: int32
 
 learner:
-  path: classic.dqn
+  path: asrel.learners.classic.dqn
   conf:
     device: cuda
     net:
-      path: feed_forward
+      path: asrel.networks.feed_forward
       conf:
         hidden_layers: [256, 256]
         optimizer:
@@ -54,14 +54,14 @@ learner:
     
     policy_update_freq: 1000
 
-
-pipelines:
-  - path: observation.standard
-    conf:
-      batch_split: 3
-  - path: action.standard
-  - path: dataset.standard
-  - path: policy.standard
+orchestrator:
+  pipelines:
+    - path: asrel.pipelines.observation.standard
+      conf:
+        batch_split: 3
+    - path: asrel.pipelines.action.standard
+    - path: asrel.pipelines.dataset.standard
+    - path: asrel.pipelines.policy.standard
 
 registry:
   shared:

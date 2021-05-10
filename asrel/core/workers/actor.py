@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Type
 
 from asrel.actors.base import BaseActor
 import asrel.core.workers.events as events
-from asrel.core.utils import take_tensor_from_dict, take_tensors_from_state_dicts, set_worker_rng
+from asrel.core.utils import take_tensor_from_dict, take_tensors_from_state_dicts, set_worker_rng, validate_subclass
 
 class ActorWorker(mp.Process):
   def __init__(
@@ -29,6 +29,7 @@ class ActorWorker(mp.Process):
     self.output_queue = output_queue
     self.seed_seq = seed_seq
 
+    validate_subclass(actor_class, BaseActor)
     self.actor_class = actor_class
     self.actor_config = actor_config
 

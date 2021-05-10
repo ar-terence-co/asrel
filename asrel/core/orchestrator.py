@@ -5,25 +5,28 @@ import sys
 import time
 import timeit
 import torch.multiprocessing as mp
-from typing import Dict, List
+from typing import Dict, List, Tuple, Type
 
 from asrel.core.registry import WorkerRegistry
-from asrel.core.utils import set_worker_rng, get_pipeline_args_from_config
+from asrel.core.utils import set_worker_rng, validate_subclass
 import asrel.core.workers.events as events
+from asrel.pipelines.base import BasePipeline
 
 class Orchestrator(mp.Process):
   def __init__(
     self,
     registry: WorkerRegistry,
     seed_seq: np.random.SeedSequence,
-    pipeline_config: List[Dict],
+    pipeline_class_configs: List[Tuple[Type[BasePipeline], Dict]],
     global_config: Dict = {},
   ):
     super().__init__()
     self.registry = registry
     self.seed_seq = seed_seq
 
-    self.pipeline_config = pipeline_config
+    for pipeline_class, _ in pipeline_class_configs:
+      validate_subclass(pipeline_class, BasePipeline)
+    self.pipeline_class_configs = pipeline_class_configs
     self.global_config = global_config
 
   def setup(self):
@@ -68,13 +71,12 @@ class Orchestrator(mp.Process):
 
   def _create_pipelines(self):
     pipelines = []
-    for config in self.pipeline_config:
-      pipeline_args = get_pipeline_args_from_config(config)
-      pipeline = pipeline_args["pipeline_class"](
+    for pipeline_class, pipeline_config in self.pipeline_class_configs:
+      pipeline = pipeline_class(
         registry=self.registry,
         shared_dict=self.shared_dict,
         process_state=self.process_state,
-        **pipeline_args["pipeline_config"],
+        **pipeline_config,
         global_config=self.global_config,
       )
       pipelines.append(pipeline)

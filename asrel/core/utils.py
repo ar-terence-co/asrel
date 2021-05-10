@@ -9,7 +9,7 @@ import torch
 from typing import Any, Dict, Optional, Tuple, Type
 import yaml
 
-DEFAULT_CONFIG = pathlib.Path("config.yml")
+DEFAULT_CONFIG = pathlib.Path("asrel.yml")
 DEFAULT_CHECKPOINT_DIR = pathlib.Path(".networks")
 DEFAULT_DEVICE = torch.device("cpu")
 
@@ -61,19 +61,8 @@ def get_registry_args_from_config(config: Dict) -> Dict:
     "shared": config.get("shared", {})
   }
 
-def get_orchestrator_from_config(config: Dict, seed_seq: np.random.SeedSequence) -> Dict:
-  orch_path = f"asrel.orchestrators.{config['path']}"
-  orch_class_name = config.get("class")
-  orch_class = get_class_from_module_path(orch_path, class_name=orch_class_name, class_suffix="Orchestrator")
-
-  return orch_class(
-    seed_seq=seed_seq,
-    max_episodes=config.get("max_episodes", 100),
-    **config.get("conf", {}),
-  )
-
 def get_env_args_from_config(config: Dict) -> Dict:
-  env_path = f"asrel.environments.{config['path']}"
+  env_path = config['path']
   env_class_name = config.get("class")
   env_class = get_class_from_module_path(env_path, class_name=env_class_name, class_suffix="Environment")
 
@@ -86,7 +75,7 @@ def get_env_args_from_config(config: Dict) -> Dict:
 
 
 def get_actor_args_from_config(config: Dict) -> Dict:
-  actor_path = f"asrel.actors.{config['path']}"
+  actor_path = config['path']
   actor_class_name = config.get("class")
   actor_class = get_class_from_module_path(actor_path, class_name=actor_class_name, class_suffix="Actor")
 
@@ -98,7 +87,7 @@ def get_actor_args_from_config(config: Dict) -> Dict:
 
 
 def get_store_args_from_config(config: Dict) -> Dict:
-  store_path = f"asrel.stores.{config['path']}"
+  store_path = config['path']
   store_class_name = config.get("class")
   store_class = get_class_from_module_path(store_path, class_name=store_class_name, class_suffix="ExperienceStore")
 
@@ -110,7 +99,7 @@ def get_store_args_from_config(config: Dict) -> Dict:
   }
 
 def get_learner_args_from_config(config: Dict) -> Dict:
-  learner_path = f"asrel.learners.{config['path']}"
+  learner_path = config['path']
   learner_class_name = config.get("class")
   learner_class = get_class_from_module_path(learner_path, class_name=learner_class_name, class_suffix="Learner")
 
@@ -121,7 +110,7 @@ def get_learner_args_from_config(config: Dict) -> Dict:
 
 
 def get_net_from_config(config: Dict, **kwargs) -> torch.nn.Module:
-  net_path = f"asrel.networks.{config['path']}"
+  net_path = config['path']
   net_class_name = config.get("class")
   net_class = get_class_from_module_path(net_path, class_name=net_class_name, class_suffix="Network")
 
@@ -130,14 +119,17 @@ def get_net_from_config(config: Dict, **kwargs) -> torch.nn.Module:
   return net_class(**net_config, **kwargs)
 
 
-def get_pipeline_args_from_config(config: Dict) -> Dict:
-  pipeline_path = f"asrel.pipelines.{config['path']}"
-  pipeline_class_name = config.get("class")
-  pipeline_class = get_class_from_module_path(pipeline_path, class_name=pipeline_class_name, class_suffix="Pipeline")
-
+def get_orchestrator_args_from_config(config: Dict) -> Dict:
+  pipeline_class_configs = []
+  for c in config["pipelines"]:
+    pipeline_path = c['path']
+    pipeline_class_name = c.get("class")
+    pipeline_class = get_class_from_module_path(pipeline_path, class_name=pipeline_class_name, class_suffix="Pipeline")
+    
+    pipeline_class_configs.append((pipeline_class, c.get("conf", {})))
+  
   return {
-    "pipeline_class": pipeline_class,
-    "pipeline_config": config.get("conf", {})
+    "pipeline_class_configs": pipeline_class_configs,
   }
 
 
@@ -184,6 +176,9 @@ def get_instance_from_config(module: Any, name: str = "", default_class: Optiona
   
   return class_(**kwargs)
 
+def validate_subclass(subclass: Type, parent: Type):
+  if not issubclass(subclass, parent):
+    raise ConfigError(f"{subclass.__module__}.{subclass.__name__} is not a subclass of {parent.__module__}.{parent.__name__}")
 
 def noop(*args, **kwargs):
   pass
