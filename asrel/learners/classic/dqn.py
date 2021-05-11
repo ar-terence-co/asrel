@@ -9,6 +9,7 @@ from typing import Dict
 from asrel.core.utils import get_net_from_config
 from asrel.learners.base import BaseLearner
 from asrel.learners.utils import hard_update, soft_update
+from asrel.networks.base import BaseNetwork
 
 class DQNLearner(BaseLearner):
   def __init__(
@@ -25,7 +26,7 @@ class DQNLearner(BaseLearner):
   ):
     super().__init__(**kwargs)
 
-    self.net = get_net_from_config(
+    self.net: BaseNetwork = get_net_from_config(
       net,
       input_size=self.input_space.shape,
       output_size=(self.output_space.n,),
@@ -63,6 +64,9 @@ class DQNLearner(BaseLearner):
       self._update_policy()
       
       self.total_steps += 1
+
+  def save_networks(self):
+    self.net.save_checkpoint()
 
   def _compute_loss(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
     state = data["state"]

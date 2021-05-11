@@ -34,7 +34,7 @@ class StandardDatasetPipeline(BasePipeline):
         "type": events.LEARNER_TRAIN_TASK,
         "data": batch_tensor,
       }
-      self.learner_input_queue.put(task)
+      self.send_task(self.learner_input_queue, task)
 
   def _get_output(self) -> Dict:
     try:

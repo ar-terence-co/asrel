@@ -90,6 +90,9 @@ class LearnerWorker(mp.Process):
 
         yield tensor_data
 
+      elif task["type"] == events.LEARNER_SAVE_NETWORKS_TASK:
+        self.learner.save_networks()
+
       elif task["type"] == events.WORKER_TERMINATE_TASK:
         break
 

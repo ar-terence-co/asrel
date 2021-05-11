@@ -39,3 +39,7 @@ class BaseLearner(ABC):
   @abstractmethod
   def train(self):
     pass
+
+  @abstractmethod
+  def save_networks(self):
+    pass

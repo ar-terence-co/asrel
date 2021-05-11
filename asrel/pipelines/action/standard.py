@@ -45,7 +45,7 @@ class StandardActionPipeline(BasePipeline):
         }
 
         env_worker_idx, _ = env_idx
-        self.env_input_queues[env_worker_idx].put(task)
+        self.send_task(self.env_input_queues[env_worker_idx], task)
       
       actor_idx = (actor_idx + 1) % self.actor_q_count
 

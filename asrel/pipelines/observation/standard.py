@@ -8,6 +8,7 @@ import asrel.core.workers.events as events
 from asrel.pipelines.base import BasePipeline
 
 ACTOR_WAIT_TIMEOUT = 3
+MOVING_AVERAGE_STEPS = 100
 
 class StandardObservationPipeline(BasePipeline):
   """
@@ -24,6 +25,7 @@ class StandardObservationPipeline(BasePipeline):
     self.env_output_queues = self.registry.output_queues["environment"]
     self.actor_input_queues = self.registry.input_queues["actor"]
     self.store_input_queue = self.registry.input_queues["store"][0]
+    self.learner_input_queue = self.registry.input_queues["learner"][0]
 
     self.env_q_count = len(self.env_output_queues)
     self.actor_q_count = len(self.actor_input_queues)
@@ -44,6 +46,8 @@ class StandardObservationPipeline(BasePipeline):
 
     if "experiences" not in self.shared_dict:
       self.shared_dict["experiences"] = {}
+    if "scores" not in self.shared_dict:
+      self.shared_dict["scores"] = np.array([], dtype=float)
 
     self.max_episodes = self.global_config.get("max_episodes", 100)
     self.n_steps = self.global_config.get("n_steps", 1)
@@ -69,9 +73,9 @@ class StandardObservationPipeline(BasePipeline):
             "type": events.STORE_ADD_EXPERIENCE_TASK,
             "experience": exp,
           }
-          self.store_input_queue.put(task)
+          self.send_task(self.store_input_queue, task)
 
-      batch_obs, env_idxs = self._process_batch_outputs(outputs)
+      batch_obs, env_idxs, should_save = self._process_batch_outputs(outputs)
       task = {
         "type": events.ACTOR_CHOOSE_ACTION_TASK,
         "observation": torch.tensor(batch_obs).to(self.actor_devices[actor_idx]),
@@ -79,7 +83,13 @@ class StandardObservationPipeline(BasePipeline):
         "env_idx": env_idxs,
         "actor_idx": actor_idx,
       }
-      self.actor_input_queues[actor_idx].put(task)
+      self.send_task(self.actor_input_queues[actor_idx], task)
+
+      if should_save:
+        task = {
+          "type": events.LEARNER_SAVE_NETWORKS_TASK
+        }
+        self.send_task(self.learner_input_queue, task)
 
       actor_idx = (actor_idx + 1) % self.actor_q_count
       
@@ -137,6 +147,7 @@ class StandardObservationPipeline(BasePipeline):
   def _process_batch_outputs(self, outputs: List[Dict]) -> Tuple[List[np.ndarray], List[Tuple[int, int]]]:
     batch_obs = []
     env_idxs = []
+    should_save = False
     for output in outputs:
       batch_obs.append(output["observation"])
       env_idxs.append(output["env_idx"])
@@ -144,17 +155,28 @@ class StandardObservationPipeline(BasePipeline):
 
       if output["episode_done"]:
         self.process_state["total_episodes"] += 1
+        self.shared_dict["scores"] = np.append(self.shared_dict["scores"], output["score"])
+        average_score = self.shared_dict["scores"][-MOVING_AVERAGE_STEPS:].mean()
+        if (
+          "max_average_score" not in self.shared_dict or 
+          average_score > self.shared_dict["max_average_score"]
+        ):
+          self.shared_dict["max_average_score"] = average_score
+          should_save = True
+
         print(
           self.process_state["total_episodes"],
           output["env_idx"],
           output["episode_step"],
           output["score"],
+          average_score,
         )
+
         if self.process_state["total_episodes"] >= self.max_episodes:
           worker_idx, sub_idx = output["env_idx"]
           self.envs_completed[worker_idx][sub_idx] = True
 
-    return batch_obs, env_idxs
+    return batch_obs, env_idxs, should_save
 
   def _update_experiences(self, output) -> List[Dict]:
     env_idx = output["env_idx"]

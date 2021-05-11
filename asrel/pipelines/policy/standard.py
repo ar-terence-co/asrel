@@ -44,7 +44,7 @@ class StandardPolicyPipeline(BasePipeline):
         continue
 
       for actor_input_queue in self.actor_input_queues:
-        actor_input_queue.put(task)
+        self.send_task(actor_input_queue, task)
       
       if not actors_intialized and task["type"] == events.ACTOR_SYNC_NETWORKS_TASK:
         actors_intialized = True

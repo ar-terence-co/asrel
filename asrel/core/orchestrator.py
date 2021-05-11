@@ -86,6 +86,7 @@ class Orchestrator(mp.Process):
   def _terminate_workers(self):
     for key, input_queues in self.registry.input_queues.items():
       for input_queue in input_queues:
+        self._flush_queue(input_queue, timeout=0)
         input_queue.put({
           "type": events.WORKER_TERMINATE_TASK
         })

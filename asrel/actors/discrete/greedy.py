@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from asrel.actors.base import BaseActor
 from asrel.core.utils import get_net_from_config
+from asrel.networks.base import BaseNetwork
 
 class GreedyDiscreteActor(BaseActor):
   def __init__(
@@ -15,7 +16,7 @@ class GreedyDiscreteActor(BaseActor):
   ):
     super().__init__(**kwargs)
 
-    self.net = get_net_from_config(
+    self.net: BaseNetwork = get_net_from_config(
       net,
       input_size=self.input_space.shape,
       output_size=(self.output_space.n,),
