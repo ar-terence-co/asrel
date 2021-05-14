@@ -53,6 +53,7 @@ class LearnerWorker(mp.Process):
 
   def run(self):
     self.setup()
+    self.learner.initialize_actors()
     self.learner.train()
     self.cleanup()
 
@@ -91,7 +92,7 @@ class LearnerWorker(mp.Process):
         yield tensor_data
 
       elif task["type"] == events.LEARNER_SAVE_NETWORKS_TASK:
-        self.learner.save_networks()
+        self.learner.save_network_checkpoints()
 
       elif task["type"] == events.WORKER_TERMINATE_TASK:
         break

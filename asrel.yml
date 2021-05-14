@@ -1,18 +1,32 @@
 seed: 1234567890
 global: 
-  checkpoint_dir: ".models"
+  checkpoint_dir: ".checkpoints/dqn-pong"
+  should_save: true
+  should_load: true
   max_episodes: 10000
   batch_size: 16
 
   n_steps: 1
-  gamma: 0.99
+  gamma: 1.
 
 environment:
-  path: asrel.environments.gym.atari
-  num_workers: 4
+  path: asrel.environments.gym
+  num_workers: 2
   num_envs_per_worker: 3
   conf:
-    id: Acrobot-v1
+    id: Pong-v0
+    wrappers:
+    - path: asrel.environments.gym.wrappers.atari_observation
+      conf:
+        crop: [30, 210]
+    - path: asrel.environments.gym.wrappers.frame_history
+      conf:
+        history_len: 4
+    - path: asrel.environments.gym.wrappers.frame_skip
+      conf:
+        skip_len: 4
+    # - path: asrel.environments.gym.wrappers.total_score
+    # - path: asrel.environments.gym.wrappers.unit_reward
 
 actor:
   path: asrel.actors.discrete.greedy
@@ -20,9 +34,19 @@ actor:
   conf: 
     device: cuda
     net:
-      path: asrel.networks.feed_forward
+      path: asrel.networks.simple_conv2d
       conf:
-        hidden_layers: [256, 256]
+        conv_params:
+        - out_channels: 32
+          kernel_size: 8
+          stride: 4
+        - out_channels: 64
+          kernel_size: 4
+          stride: 2
+        - out_channels: 64
+          kernel_size: 3
+          stride: 1
+        ff_layers: [128]
 
 store:
   path: asrel.stores.exp_replay
@@ -30,7 +54,7 @@ store:
   buffer_size: 16
   warmup_steps: 1024
   conf: 
-    maxsize: 100000
+    maxsize: 10000
     types:
       action: int32
 
@@ -39,14 +63,24 @@ learner:
   conf:
     device: cuda
     net:
-      path: asrel.networks.feed_forward
+      path: asrel.networks.simple_conv2d
       conf:
-        hidden_layers: [256, 256]
+        conv_params:
+        - out_channels: 32
+          kernel_size: 8
+          stride: 4
+        - out_channels: 64
+          kernel_size: 4
+          stride: 2
+        - out_channels: 64
+          kernel_size: 3
+          stride: 1
+        ff_layers: [128]
         optimizer:
           name: Adam
           lr: 1.e-3
     
-    epsilon: 1.0
+    epsilon: 1.e-3
     epsilon_dec: 1.e-4
     epsilon_end: 1.e-3
     use_hard_update: false

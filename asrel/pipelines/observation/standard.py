@@ -7,8 +7,9 @@ from typing import Dict, List, Tuple
 import asrel.core.workers.events as events
 from asrel.pipelines.base import BasePipeline
 
-ACTOR_WAIT_TIMEOUT = 3
-MOVING_AVERAGE_STEPS = 100
+ACTOR_WAIT_TIMEOUT = 3 # seconds
+MOVING_AVERAGE_STEPS = 100 # steps
+SAVE_IF_IDLE = 100 # episodes
 
 class StandardObservationPipeline(BasePipeline):
   """
@@ -53,6 +54,8 @@ class StandardObservationPipeline(BasePipeline):
     self.n_steps = self.global_config.get("n_steps", 1)
     self.gamma = self.global_config.get("gamma", 1.0)
 
+    self.last_saved = -1
+
   def run(self):
     self._wait_for_actors()
 
@@ -90,6 +93,7 @@ class StandardObservationPipeline(BasePipeline):
           "type": events.LEARNER_SAVE_NETWORKS_TASK
         }
         self.send_task(self.learner_input_queue, task)
+        self.last_saved = self.process_state["total_episodes"]
 
       actor_idx = (actor_idx + 1) % self.actor_q_count
       
@@ -158,6 +162,7 @@ class StandardObservationPipeline(BasePipeline):
         self.shared_dict["scores"] = np.append(self.shared_dict["scores"], output["score"])
         average_score = self.shared_dict["scores"][-MOVING_AVERAGE_STEPS:].mean()
         if (
+          self.process_state["total_episodes"] - self.last_saved > SAVE_IF_IDLE or
           "max_average_score" not in self.shared_dict or 
           average_score > self.shared_dict["max_average_score"]
         ):

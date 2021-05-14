@@ -33,6 +33,10 @@ class DQNLearner(BaseLearner):
       device=self.device,
       checkpoint_dir=self.checkpoint_dir
     )
+    self.networks = [self.net]
+
+    self.load_network_checkpoints()
+    
     self.target_net = copy.deepcopy(self.net)
     self.target_net.requires_grad_(False)
 
@@ -51,6 +55,7 @@ class DQNLearner(BaseLearner):
 
     self.total_steps = 0
 
+  def initialize_actors(self):
     self._update_policy()
 
   def train(self):
@@ -64,9 +69,6 @@ class DQNLearner(BaseLearner):
       self._update_policy()
       
       self.total_steps += 1
-
-  def save_networks(self):
-    self.net.save_checkpoint()
 
   def _compute_loss(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
     state = data["state"]
